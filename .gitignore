@@ -2,6 +2,14 @@
 runiccrush.exe
 runiccrush
 
+# Go installer / setup files (not part of the game)
+*.zip
+*.msi
+*.log
+
+# Claude Code internal
+.claude/
+
 # Go build cache
 *.test
 *.out
