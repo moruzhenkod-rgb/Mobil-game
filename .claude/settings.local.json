@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PATH = \"C:\\\\Go_install\\\\go\\\\bin;\" + $env:PATH; $env:GOPATH = \"C:\\\\Users\\\\IP3-15IML05\\\\go\"; cd C:\\\\App; go build ./... 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Go_install\\\\go\\\\bin;\" + $env:PATH; $env:GOPATH = \"C:\\\\Users\\\\IP3-15IML05\\\\go\"; cd C:\\\\App; $p = Start-Process -FilePath \"go\" -ArgumentList \"run\",\".\" -PassThru -WindowStyle Normal; Start-Sleep -Seconds 5; if \\(-not $p.HasExited\\) { $p.Kill\\(\\); \"OK - ran 5s\" } else { \"Exited code=$\\($p.ExitCode\\)\" })",
+      "PowerShell(git -C C:\\\\App status 2>&1)",
+      "PowerShell(winget install --id Git.Git -e --source winget 2>&1)",
+      "PowerShell($env:PATH = \"$env:PATH;C:\\\\Program Files\\\\Git\\\\cmd\"; git --version 2>&1)"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+# Compiled binary
+runiccrush.exe
+runiccrush
+
+# Go build cache
+*.test
+*.out
+
+# Save data (user-specific)
+save.json
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+Thumbs.db
+Desktop.ini
