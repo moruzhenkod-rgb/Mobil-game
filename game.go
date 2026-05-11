@@ -13,6 +13,7 @@ import (
 type Game struct {
 	state     GameState
 	prevState GameState // for back-navigation
+	splash    *Splash   // startup intro
 
 	// Playing
 	level      Level
@@ -69,12 +70,10 @@ func NewGame() *Game {
 	InitFonts()
 	ads.LoadRewardedAd()
 	g := &Game{
-		state:    StateAgeGate,
+		state:    StateIntro,
 		levelNum: 1,
 		stars:    makeStars(90),
-	}
-	if progress.AgeVerified {
-		g.state = StateMainMenu
+		splash:   NewSplash(),
 	}
 	return g
 }
@@ -95,11 +94,13 @@ func makeStars(n int) []starDot {
 
 func (g *Game) goToMainMenu() {
 	g.state = StateMainMenu
+	StartMenuMusic()
 }
 
 func (g *Game) goToChapterSelect() {
 	g.prevState = g.state
 	g.state = StateChapterSelect
+	StopMenuMusic()
 }
 
 func (g *Game) goToLevelSelect(biome int) {
@@ -172,6 +173,8 @@ func (g *Game) Update() error {
 	g.shake.Update()
 
 	switch g.state {
+	case StateIntro:
+		g.updateIntro()
 	case StateAgeGate:
 		g.updateAgeGate()
 	case StateMainMenu:
@@ -194,6 +197,11 @@ func (g *Game) Update() error {
 		g.updateShop()
 	case StateLeaderboard:
 		g.updateLeaderboard()
+	case StateCollection, StateQuests, StateMessages:
+		_, _, clicked := g.getClick()
+		if clicked {
+			g.state = g.prevState
+		}
 	}
 	return nil
 }
@@ -218,6 +226,30 @@ func (g *Game) updateStars() {
 	}
 }
 
+func (g *Game) updateIntro() {
+	// Don't interfere once transition is running
+	if sceneTransition.active {
+		return
+	}
+	g.splash.Update()
+	// Tap to skip
+	_, _, clicked := g.getClick()
+	if clicked {
+		g.splash.Skip()
+	}
+	if g.splash.Done {
+		FadeOut(10, func() {
+			if progress.AgeVerified {
+				g.state = StateMainMenu
+				StartMenuMusic()
+			} else {
+				g.state = StateAgeGate
+			}
+			FadeIn(14, nil)
+		})
+	}
+}
+
 func (g *Game) updateAgeGate() {
 	mx, my, clicked := g.getClick()
 	if !clicked {
@@ -227,36 +259,69 @@ func (g *Game) updateAgeGate() {
 		progress.AgeVerified = true
 		saveProgress()
 		g.state = StateMainMenu
+		StartMenuMusic()
 	}
 }
 
 func (g *Game) updateMainMenu() {
+	UpdateMenuBg()
 	mx, my, clicked := g.getClick()
 	if !clicked {
 		return
 	}
 	PlaySound(SndButton)
-	// PLAY
-	if mx >= ScreenW/2-100 && mx <= ScreenW/2+100 && my >= 340 && my <= 396 {
-		g.goToChapterSelect()
-		return
-	}
-	// CONTINUE
-	if progress.UnlockedLevel > 1 && mx >= ScreenW/2-120 && mx <= ScreenW/2+120 && my >= 420 && my <= 470 {
-		g.launchLevel(progress.UnlockedLevel)
-		return
-	}
-	// SETTINGS
-	if mx >= ScreenW/2-80 && mx <= ScreenW/2+80 && my >= 490 && my <= 534 {
+	// GIF: 768×1376 → scale≈0.698, offX≈2, offY=0
+	// HUD settings gear (top-right, GIF orig x≈[682,758] y≈[8,82])
+	if mx >= 478 && mx <= 532 && my >= 5 && my <= 57 {
 		g.prevState = g.state
 		g.state = StateSettings
 		return
 	}
-	// SHOP
-	if mx >= ScreenW/2-80 && mx <= ScreenW/2+80 && my >= 548 && my <= 592 {
+	// PLAY button (GIF orig x≈[228,542] y≈[428,512])
+	if mx >= 161 && mx <= 381 && my >= 299 && my <= 358 {
+		g.goToChapterSelect()
+		return
+	}
+	// Row 1 — ADVENTURE (left half, GIF orig y≈[866,1000])
+	if mx >= 2 && mx <= 268 && my >= 605 && my <= 698 {
+		g.goToChapterSelect()
+		return
+	}
+	// Row 1 — LEVELS (right half)
+	if mx >= 270 && mx <= 538 && my >= 605 && my <= 698 {
+		g.goToChapterSelect()
+		return
+	}
+	// Row 2 — SHOP (left half, GIF orig y≈[1006,1136])
+	if mx >= 2 && mx <= 268 && my >= 702 && my <= 793 {
+		StopMenuMusic()
 		shopState.Reset()
 		g.prevState = g.state
 		g.state = StateShop
+		return
+	}
+	// Row 2 — COLLECTION (right half)
+	if mx >= 270 && mx <= 538 && my >= 702 && my <= 793 {
+		g.prevState = g.state
+		g.state = StateCollection
+		return
+	}
+	// Row 3 — QUESTS (left third, GIF orig y≈[1142,1268])
+	if mx >= 2 && mx <= 181 && my >= 797 && my <= 885 {
+		g.prevState = g.state
+		g.state = StateQuests
+		return
+	}
+	// Row 3 — SETTINGS (center third)
+	if mx >= 183 && mx <= 360 && my >= 797 && my <= 885 {
+		g.prevState = g.state
+		g.state = StateSettings
+		return
+	}
+	// Row 3 — MESSAGES (right third)
+	if mx >= 362 && mx <= 538 && my >= 797 && my <= 885 {
+		g.prevState = g.state
+		g.state = StateMessages
 		return
 	}
 }
@@ -533,6 +598,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawStars(canvas)
 
 	switch g.state {
+	case StateIntro:
+		g.splash.Draw(canvas)
 	case StateAgeGate:
 		DrawAgeGate(canvas)
 	case StateMainMenu:
@@ -569,6 +636,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		DrawShop(canvas, g.tick)
 	case StateLeaderboard:
 		DrawLeaderboard(canvas)
+	case StateCollection:
+		DrawPlaceholder(canvas, "COLLECTION", color.RGBA{165, 80, 220, 255})
+	case StateQuests:
+		DrawPlaceholder(canvas, "QUESTS", color.RGBA{140, 80, 255, 255})
+	case StateMessages:
+		DrawPlaceholder(canvas, "MESSAGES", color.RGBA{60, 150, 255, 255})
 	}
 
 	// Blit offscreen → screen with shake

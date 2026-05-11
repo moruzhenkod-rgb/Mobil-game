@@ -29,7 +29,8 @@ const (
 type GameState int
 
 const (
-	StateAgeGate     GameState = iota
+	StateIntro       GameState = iota // studio splash / GIF intro
+	StateAgeGate
 	StateMainMenu              // title + play/settings
 	StateChapterSelect         // choose biome
 	StateLevelSelect           // choose level within biome
@@ -41,6 +42,9 @@ const (
 	StateSettings              // settings screen
 	StateShop                  // in-game shop
 	StateLeaderboard           // online leaderboard
+	StateCollection            // rune / character collection
+	StateQuests                // daily quests
+	StateMessages              // inbox / mail
 )
 
 // ── Tile Kinds ────────────────────────────────────────────────────

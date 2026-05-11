@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"math"
 	"math/rand"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 )
 
 const sampleRate = 44100
@@ -15,24 +17,24 @@ const sampleRate = 44100
 type SoundID int
 
 const (
-	SndSwap    SoundID = iota // gem swap attempt
-	SndMatch                  // successful match
-	SndBonus                  // bonus tile created
-	SndBomb                   // bomb/row/col explodes
-	SndRainbow                // rainbow tile activates
-	SndIce                    // ice cracked
-	SndWin                    // level complete fanfare
-	SndLose                   // out of moves
-	SndCoin                   // coin collected / purchase
-	SndButton                 // UI tap
+	SndSwap    SoundID = iota
+	SndMatch
+	SndBonus
+	SndBomb
+	SndRainbow
+	SndIce
+	SndWin
+	SndLose
+	SndCoin
+	SndButton
 )
 
 // ── Manager ───────────────────────────────────────────────────────
 
 type AudioManager struct {
-	ctx    *audio.Context
-	sfx    map[SoundID][]byte
-	music  *audio.Player
+	ctx   *audio.Context
+	sfx   map[SoundID][]byte
+	music *audio.Player
 }
 
 var audioMgr *AudioManager
@@ -78,7 +80,7 @@ func PlaySound(id SoundID) {
 	p.Play()
 }
 
-// SetMusicEnabled starts or pauses the background music track.
+// SetMusicEnabled starts or pauses background music.
 func SetMusicEnabled(on bool) {
 	if audioMgr == nil {
 		return
@@ -92,23 +94,43 @@ func SetMusicEnabled(on bool) {
 	}
 }
 
+// startMusic loads home_fon.mp3 and plays it on an infinite loop.
 func (a *AudioManager) startMusic() {
 	if a.music != nil {
 		a.music.Close()
 		a.music = nil
 	}
-	data := genMusicLoop()
-	loop := audio.NewInfiniteLoop(bytes.NewReader(data), int64(len(data)))
+	raw, err := os.ReadFile("home_fon.mp3")
+	if err != nil {
+		return
+	}
+	decoded, err := mp3.DecodeWithSampleRate(sampleRate, bytes.NewReader(raw))
+	if err != nil {
+		return
+	}
+	loop := audio.NewInfiniteLoop(decoded, decoded.Length())
 	p, err := a.ctx.NewPlayer(loop)
 	if err != nil {
 		return
 	}
-	p.SetVolume(0.32)
+	p.SetVolume(0.50)
 	p.Play()
 	a.music = p
 }
 
-// ── PCM helpers ───────────────────────────────────────────────────
+// StartMenuMusic / StopMenuMusic — music is now continuous;
+// these are kept so existing callers compile without changes.
+func StartMenuMusic() {
+	if audioMgr != nil && progress.MusicOn {
+		if audioMgr.music == nil || !audioMgr.music.IsPlaying() {
+			audioMgr.startMusic()
+		}
+	}
+}
+
+func StopMenuMusic() {} // music plays through gameplay too
+
+// ── PCM helpers (used for SFX only) ──────────────────────────────
 
 func writeStereo(buf []byte, pos int, v float64) {
 	if v > 1 {
@@ -136,7 +158,6 @@ func env(t, dur float64) float64 {
 	}
 }
 
-// genTone creates a mono sine tone converted to stereo PCM.
 func genTone(freq, dur, amp float64) []byte {
 	n := int(sampleRate * dur)
 	buf := make([]byte, n*4)
@@ -147,7 +168,6 @@ func genTone(freq, dur, amp float64) []byte {
 	return buf
 }
 
-// genArpeggio concatenates a sequence of tones.
 func genArpeggio(freqs []float64, noteDur, amp float64) []byte {
 	n := int(sampleRate * noteDur)
 	buf := make([]byte, len(freqs)*n*4)
@@ -163,7 +183,6 @@ func genArpeggio(freqs []float64, noteDur, amp float64) []byte {
 	return buf
 }
 
-// genNoise creates a lowpass-filtered noise burst (explosion sound).
 func genNoise(dur, amp float64) []byte {
 	n := int(sampleRate * dur)
 	buf := make([]byte, n*4)
@@ -173,41 +192,6 @@ func genNoise(dur, amp float64) []byte {
 		raw := rand.Float64()*2 - 1
 		prev = prev*0.80 + raw*0.20
 		writeStereo(buf, i, prev*amp*env(t, dur))
-	}
-	return buf
-}
-
-// genMusicLoop generates a ~7-second mystical arpeggio loop in A-minor.
-func genMusicLoop() []byte {
-	type note struct{ f, d float64 }
-	beat := 60.0 / 108.0
-	h := beat / 2
-
-	seq := []note{
-		{220, beat}, {261.63, h}, {329.63, h},
-		{392, beat}, {329.63, h}, {261.63, h},
-		{220, beat}, {174.61, h}, {220, h},
-		{261.63, beat}, {329.63, beat},
-		{392, beat}, {440, h}, {392, h},
-		{349.23, beat}, {329.63, beat},
-	}
-
-	total := 0
-	for _, p := range seq {
-		total += int(sampleRate * p.d)
-	}
-	buf := make([]byte, total*4)
-	pos := 0
-	for _, p := range seq {
-		n := int(sampleRate * p.d)
-		for i := 0; i < n; i++ {
-			t := float64(i) / sampleRate
-			v := (math.Sin(2*math.Pi*p.f*t)*0.65 +
-				math.Sin(4*math.Pi*p.f*t)*0.20 +
-				math.Sin(6*math.Pi*p.f*t)*0.10) * 0.20 * env(t, p.d)
-			writeStereo(buf, pos+i, v)
-		}
-		pos += n
 	}
 	return buf
 }

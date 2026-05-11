@@ -28,8 +28,13 @@ type SaveData struct {
 	NotifsOn bool
 
 	// Account
+	UserName  string // display name shown in HUD
 	UserEmail string
 	UserUID   string
+
+	// Resources
+	Gems   int // premium crystals
+	Energy int // lives/energy (max 30)
 
 	// Parental controls
 	ParentalPIN  string // hashed 4-digit PIN (SHA-256 hex), empty = no PIN
@@ -75,7 +80,10 @@ func defaultSave() SaveData {
 		SoundOn:       true,
 		MusicOn:       true,
 		NotifsOn:      true,
-		Coins:         50, // starter coins
+		Coins:         50,
+		Gems:          150,
+		Energy:        30,
+		UserName:      "MAGE_LEO",
 	}
 }
 

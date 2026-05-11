@@ -192,6 +192,41 @@ func DrawLeaderboard(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Tap anywhere to go back", ScreenW/2-66, y)
 }
 
+// ── Placeholder screens ───────────────────────────────────────────
+
+func DrawPlaceholder(screen *ebiten.Image, title string, accent color.RGBA) {
+	screen.Fill(color.RGBA{10, 5, 28, 255})
+
+	// Top bar
+	vector.DrawFilledRect(screen, 0, 0, ScreenW, 58, color.RGBA{0, 0, 0, 180}, false)
+	vector.DrawFilledRect(screen, 0, 56, ScreenW, 3, accent, false)
+
+	// Back button
+	vector.DrawFilledRect(screen, 12, 12, 72, 32, color.RGBA{40, 28, 72, 220}, false)
+	vector.DrawFilledRect(screen, 12, 12, 72, 3, color.RGBA{100, 70, 180, 200}, false)
+	if FontBtn != nil {
+		FCenter(screen, "< BACK", 48, 17, FontBtn, ColWhite)
+	}
+
+	// Title
+	if FontLg != nil {
+		FCenter(screen, title, float64(ScreenW)/2, 16, FontLg, accent)
+	}
+
+	// Center panel
+	vector.DrawFilledRect(screen, 60, 220, ScreenW-120, 400, color.RGBA{18, 10, 46, 240}, false)
+	vector.DrawFilledRect(screen, 60, 220, ScreenW-120, 3, accent, false)
+	vector.DrawFilledRect(screen, 60, 617, ScreenW-120, 3, accent, false)
+
+	if FontMd != nil {
+		FCenter(screen, "Coming Soon!", float64(ScreenW)/2, 390, FontMd, ColGold)
+	}
+	if FontSm != nil {
+		FCenter(screen, "This feature is under construction.", float64(ScreenW)/2, 432, FontSm, ColGray)
+		FCenter(screen, "Tap anywhere to go back.", float64(ScreenW)/2, 460, FontSm, ColDim)
+	}
+}
+
 // ── Shared helpers ────────────────────────────────────────────────
 
 func drawStar(screen *ebiten.Image, cx, cy, r float32, c color.RGBA) {

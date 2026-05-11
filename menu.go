@@ -3,72 +3,197 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+// ── Menu background GIF (animated, looping) ──────────────────────
+
+var menuBgGIF *GIFPlayer
+var menuBgLoaded bool
+
+func ensureMenuBg() {
+	if menuBgLoaded {
+		return
+	}
+	menuBgLoaded = true
+	gp, err := LoadGIF("home.gif")
+	if err != nil || gp == nil || len(gp.frames) == 0 {
+		return
+	}
+	menuBgGIF = gp
+}
+
+// UpdateMenuBg advances the looping background animation.
+func UpdateMenuBg() {
+	if menuBgGIF != nil {
+		menuBgGIF.UpdateLoop()
+	}
+}
+
 // ── Main Menu ─────────────────────────────────────────────────────
 
 func DrawMainMenu(screen *ebiten.Image, tick int) {
-	// Animated title gems
-	gemX := []float32{80, 160, 240, 320, 400, 460}
-	gemKinds := []TileKind{TileRed, TileBlue, TileGreen, TileYellow, TilePurple, TileOrange}
-	for i, gx := range gemX {
-		bob := float32(math.Sin(float64(tick)*0.05+float64(i)*0.7)) * 8
-		gy := float32(130) + bob
-		c := gemColors[gemKinds[i]]
-		dc := gemDark[gemKinds[i]]
-		vector.DrawFilledRect(screen, gx, gy, 44, 44, c, false)
-		vector.DrawFilledRect(screen, gx, gy, 44, 4, color.RGBA{255, 255, 255, 80}, false)
-		vector.DrawFilledRect(screen, gx, gy+40, 44, 4, dc, false)
-		vector.DrawFilledCircle(screen, gx+10, gy+10, 6, color.RGBA{255, 255, 255, 100}, false)
-	}
+	ensureMenuBg()
+	ensureUIAssets()
 
-	// Title
-	if FontXL != nil {
-		FCenter(screen, "RUNIC CRUSH", float64(ScreenW)/2, 186, FontXL, ColGold)
-		FCenter(screen, "~ Match Gems, Break Curses ~", float64(ScreenW)/2, 248, FontSm, ColPurple)
+	if menuBgGIF != nil {
+		menuBgGIF.Draw(screen)
 	} else {
-		title := "RUNIC  CRUSH"
-		ebitenutil.DebugPrintAt(screen, title, ScreenW/2-len(title)*3, 200)
+		screen.Fill(color.RGBA{8, 5, 22, 255})
 	}
 
-	// Glow line under title
-	glow := uint8(160 + 80*math.Sin(float64(tick)*0.04))
-	vector.DrawFilledRect(screen, 80, 238, ScreenW-160, 2, color.RGBA{160, 100, 255, glow}, false)
-
-	// PLAY button
-	drawMenuButton(screen, "PLAY", ScreenW/2-100, 340, 200, 56, color.RGBA{50, 170, 70, 255}, color.RGBA{80, 220, 100, 200}, tick)
-
-	// Continue button (if progress exists)
-	if progress.UnlockedLevel > 1 {
-		label := fmt.Sprintf("CONTINUE (Lv.%d)", progress.UnlockedLevel)
-		drawMenuButton(screen, label, ScreenW/2-120, 420, 240, 50, color.RGBA{60, 100, 200, 255}, color.RGBA{90, 140, 255, 200}, 0)
-	}
-
-	// Settings / Shop
-	drawMenuButton(screen, "SETTINGS", ScreenW/2-80, 490, 160, 44, color.RGBA{50, 35, 90, 255}, color.RGBA{100, 70, 160, 200}, 0)
-	drawMenuButton(screen, "SHOP", ScreenW/2-80, 548, 160, 44, color.RGBA{160, 100, 20, 255}, color.RGBA{220, 160, 40, 200}, 0)
-
-	// Version / legal
-	ebitenutil.DebugPrintAt(screen, "v0.5.0  |  Privacy Policy  |  Terms of Service", 60, ScreenH-30)
-
-	// Stars count
-	total := totalStars()
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Stars: %d / %d", total, MaxLevels*3), ScreenW/2-54, ScreenH-55)
+	drawMenuHUDOverlay(screen)
 }
 
-func drawMenuButton(screen *ebiten.Image, label string, x, y, w, h int, bg, border color.RGBA, tick int) {
-	pulse := float32(0)
-	if tick > 0 {
-		pulse = float32(math.Sin(float64(tick)*0.05)) * 2
+// drawBtnText draws localised text centred at (cx, cy) with a strong drop shadow
+// so it reads clearly on any GIF background. No image backgrounds are drawn.
+func drawBtnText(screen *ebiten.Image, label string, cx, cy float64, large bool) {
+	face := FontBtn
+	if large {
+		face = FontXL
 	}
-	vector.DrawFilledRect(screen, float32(x)-pulse, float32(y)-pulse, float32(w)+pulse*2, float32(h)+pulse*2, bg, false)
-	vector.DrawFilledRect(screen, float32(x), float32(y), float32(w), 3, border, false)
-	ebitenutil.DebugPrintAt(screen, label, x+w/2-len(label)*3, y+h/2-5)
+	if face == nil || label == "" {
+		return
+	}
+	// Multi-layer shadow for readability
+	for _, d := range [][2]float64{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}, {0, 2}} {
+		FCenter(screen, label, cx+d[0]*2, cy+d[1]*2, face, color.RGBA{0, 0, 0, 160})
+	}
+	FCenter(screen, label, cx, cy, face, ColWhite)
+}
+
+func drawMenuButtonsOverlay(screen *ebiten.Image) {
+	// PLAY — centred, y≈329
+	drawBtnText(screen, T("play"), float64(ScreenW)/2, 329, true)
+
+	// Row 1 — ADVENTURE | LEVELS
+	drawBtnText(screen, T("adventure"), 135, 651, false)
+	drawBtnText(screen, T("levels"),    405, 651, false)
+
+	// Row 2 — SHOP | COLLECTION
+	drawBtnText(screen, T("shop"),       135, 747, false)
+	drawBtnText(screen, T("collection"), 405, 747, false)
+
+	// Row 3 — QUESTS | SETTINGS | MESSAGES
+	drawBtnText(screen, T("quests"),   92,  841, false)
+	drawBtnText(screen, T("settings"), 272, 841, false)
+	drawBtnText(screen, T("messages"), 452, 841, false)
+}
+
+// drawMenuHUDOverlay renders the top player-info bar.
+func drawMenuHUDOverlay(screen *ebiten.Image) {
+	const barH = 76
+
+	// ── Background: two-layer gradient simulation ─────────────────
+	vector.DrawFilledRect(screen, 0, 0, ScreenW, barH, color.RGBA{0, 0, 0, 200}, false)
+	vector.DrawFilledRect(screen, 0, 0, ScreenW, barH/2, color.RGBA{20, 12, 40, 60}, false)
+
+	// Gold top line + bottom line
+	vector.DrawFilledRect(screen, 0, 0, ScreenW, 2, color.RGBA{200, 162, 28, 200}, false)
+	vector.DrawFilledRect(screen, 0, barH-2, ScreenW, 2, color.RGBA{200, 162, 28, 160}, false)
+
+	// ── Avatar ────────────────────────────────────────────────────
+	const avD = 60
+	const avX, avY = 8, 8
+	const avCX, avCY = avX + avD/2, avY + avD/2
+
+	// Outer glow ring
+	vector.DrawFilledCircle(screen, avCX, avCY, avD/2+4, color.RGBA{200, 162, 28, 80}, false)
+	// Gold ring
+	vector.DrawFilledCircle(screen, avCX, avCY, avD/2+2, color.RGBA{200, 162, 28, 255}, false)
+	// Avatar image or fallback
+	if imgAvatarRound != nil {
+		drawImgAt(screen, imgAvatarRound, avX+1, avY+1)
+	} else {
+		vector.DrawFilledCircle(screen, avCX, avCY, avD/2, color.RGBA{30, 60, 140, 255}, false)
+		nm := progress.UserName
+		if nm == "" {
+			nm = "P"
+		}
+		if FontLg != nil {
+			FCenter(screen, string([]rune(nm)[0:1]), avCX, float64(avCY)-16, FontLg, ColWhite)
+		}
+	}
+
+	// ── Name + Level badge ────────────────────────────────────────
+	name := progress.UserName
+	if name == "" {
+		name = "PLAYER"
+	}
+	lv := progress.UnlockedLevel
+	if lv > MaxLevels {
+		lv = MaxLevels
+	}
+	tx := float64(avX + avD + 10)
+
+	if FontBtn != nil {
+		// Name shadow
+		FDraw(screen, name, tx+1, 10, FontBtn, color.RGBA{0, 0, 0, 180})
+		FDraw(screen, name, tx, 9, FontBtn, ColWhite)
+	}
+
+	// Level badge pill
+	lvStr := fmt.Sprintf("Lv %d", lv)
+	vector.DrawFilledRect(screen, float32(tx)-2, 30, 52, 18, color.RGBA{160, 120, 10, 220}, false)
+	vector.DrawFilledRect(screen, float32(tx)-2, 30, 52, 2, color.RGBA{255, 215, 50, 255}, false)
+	if FontSm != nil {
+		FDraw(screen, lvStr, tx+2, 32, FontSm, color.RGBA{255, 240, 180, 255})
+	}
+
+	// ── Vertical divider ──────────────────────────────────────────
+	divX := float32(tx + 82)
+	vector.DrawFilledRect(screen, divX, 10, 1, barH-20, color.RGBA{200, 162, 28, 100}, false)
+
+	// ── Coins ─────────────────────────────────────────────────────
+	icX := float32(tx + 90)
+	// Gold coin circle
+	vector.DrawFilledCircle(screen, icX+10, 24, 11, color.RGBA{180, 140, 10, 255}, false)
+	vector.DrawFilledCircle(screen, icX+10, 24, 8, color.RGBA{255, 210, 40, 255}, false)
+	vector.DrawFilledCircle(screen, icX+8, 22, 3, color.RGBA{255, 250, 180, 200}, false)
+	if FontBtn != nil {
+		FDraw(screen, fmt.Sprintf("%d", progress.Coins), float64(icX+24), 16, FontBtn, ColGold)
+	}
+
+	// ── Gems ──────────────────────────────────────────────────────
+	gemIconX := float32(tx + 90)
+	gx, gy := gemIconX, float32(42)
+	// Diamond shape
+	vector.DrawFilledRect(screen, gx+4, gy, 12, 5, color.RGBA{60, 160, 255, 255}, false)
+	vector.DrawFilledRect(screen, gx, gy+4, 20, 10, color.RGBA{40, 130, 240, 255}, false)
+	vector.DrawFilledRect(screen, gx+4, gy+13, 12, 5, color.RGBA{30, 100, 200, 255}, false)
+	vector.DrawFilledRect(screen, gx+7, gy+17, 6, 4, color.RGBA{20, 80, 170, 255}, false)
+	// Shine
+	vector.DrawFilledRect(screen, gx+5, gy+1, 5, 4, color.RGBA{180, 230, 255, 180}, false)
+	if FontBtn != nil {
+		FDraw(screen, fmt.Sprintf("%d", progress.Gems), float64(gx+24), 46, FontBtn,
+			color.RGBA{130, 210, 255, 255})
+	}
+
+	// ── Stars (right side) ────────────────────────────────────────
+	if FontSm != nil {
+		stars := fmt.Sprintf("★ %d", totalStars())
+		FDraw(screen, stars, float64(ScreenW)-70, 12, FontSm, color.RGBA{255, 215, 60, 230})
+	}
+
+	// ── Settings button (top-right) ───────────────────────────────
+	const gearX, gearY = float32(ScreenW - 34), float32(8)
+	const gearS = float32(28)
+	// Gear background
+	vector.DrawFilledCircle(screen, gearX+gearS/2, gearY+gearS/2, gearS/2+2,
+		color.RGBA{160, 128, 18, 220}, false)
+	vector.DrawFilledCircle(screen, gearX+gearS/2, gearY+gearS/2, gearS/2,
+		color.RGBA{30, 24, 60, 240}, false)
+	// Gear teeth (4 directions)
+	gcx, gcy := gearX+gearS/2, gearY+gearS/2
+	vector.DrawFilledCircle(screen, gcx, gcy, 6, color.RGBA{180, 175, 210, 255}, false)
+	vector.DrawFilledCircle(screen, gcx, gcy, 3, color.RGBA{30, 24, 60, 255}, false)
+	for _, d := range [][2]float32{{0, -1}, {0, 1}, {-1, 0}, {1, 0}} {
+		vector.DrawFilledRect(screen, gcx+d[0]*9-2, gcy+d[1]*9-2, 5, 5,
+			color.RGBA{180, 175, 210, 255}, false)
+	}
 }
 
 func totalStars() int {
@@ -85,7 +210,6 @@ func DrawChapterSelect(screen *ebiten.Image, tick int) {
 	ebitenutil.DebugPrintAt(screen, "SELECT CHAPTER", ScreenW/2-42, 30)
 	vector.DrawFilledRect(screen, 60, 48, ScreenW-120, 2, color.RGBA{120, 60, 200, 180}, false)
 
-	// Back button
 	drawMenuButton(screen, "< BACK", 20, 20, 80, 28, color.RGBA{40, 25, 70, 220}, color.RGBA{100, 60, 180, 180}, 0)
 
 	for b := 1; b <= BiomeCount; b++ {
@@ -108,14 +232,11 @@ func DrawChapterSelect(screen *ebiten.Image, tick int) {
 		if unlocked {
 			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("BIOME %d: %s", b, info.Name), 46, int(by)+14)
 			ebitenutil.DebugPrintAt(screen, info.Description, 46, int(by)+34)
-			// Stars for this biome
 			stars := biomeStars(b)
 			maxStars := LevelsPerBiome * 3
 			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Stars: %d/%d", stars, maxStars), 46, int(by)+54)
-			// Level range
 			lastLevel := b * LevelsPerBiome
 			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Levels %d - %d", firstLevel, lastLevel), 46, int(by)+74)
-			// Progress bar
 			pct := float32(biomeCompleted(b)) / LevelsPerBiome
 			vector.DrawFilledRect(screen, 46, by+96, float32(ScreenW-92), 10, color.RGBA{30, 20, 55, 255}, false)
 			vector.DrawFilledRect(screen, 46, by+96, float32(ScreenW-92)*pct, 10, bdc, false)
@@ -165,7 +286,6 @@ func DrawLevelSelect(screen *ebiten.Image, biome, hoverLevel, tick int) {
 
 	drawMenuButton(screen, "< BACK", 20, 20, 80, 28, color.RGBA{40, 25, 70, 220}, color.RGBA{100, 60, 180, 180}, 0)
 
-	// 4 columns × 5 rows = 20 levels
 	const cols = 4
 	bw, bh := 110, 110
 	padX := (ScreenW - cols*bw - (cols-1)*8) / 2
@@ -182,7 +302,6 @@ func DrawLevelSelect(screen *ebiten.Image, biome, hoverLevel, tick int) {
 		unlocked := isLevelUnlocked(n)
 		stars := progress.Stars[n]
 
-		// Card background
 		bg := color.RGBA{20, 12, 42, 220}
 		if !unlocked {
 			bg = color.RGBA{15, 10, 28, 200}
@@ -199,7 +318,6 @@ func DrawLevelSelect(screen *ebiten.Image, biome, hoverLevel, tick int) {
 
 		if unlocked {
 			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d", n), bx+bw/2-len(fmt.Sprintf("%d", n))*3, by+18)
-			// Stars
 			for s := 0; s < 3; s++ {
 				sc := color.RGBA{60, 50, 80, 255}
 				if s < stars {
@@ -209,11 +327,9 @@ func DrawLevelSelect(screen *ebiten.Image, biome, hoverLevel, tick int) {
 				sy := float32(by + 42)
 				drawStarSmall(screen, sx, sy, 10, sc)
 			}
-			// Difficulty dots
 			lvl := GetLevel(n)
 			drawDifficulty(screen, lvl, bx+8, by+72)
 		} else {
-			// Lock icon
 			vector.DrawFilledRect(screen, float32(bx+bw/2-8), float32(by+24), 16, 20, color.RGBA{80, 70, 100, 255}, false)
 			vector.DrawFilledCircle(screen, float32(bx+bw/2), float32(by+22), 10, color.RGBA{80, 70, 100, 255}, false)
 			vector.DrawFilledCircle(screen, float32(bx+bw/2), float32(by+22), 6, color.RGBA{20, 15, 35, 255}, false)
@@ -227,7 +343,6 @@ func drawStarSmall(screen *ebiten.Image, cx, cy, r float32, c color.RGBA) {
 }
 
 func drawDifficulty(screen *ebiten.Image, l Level, x, y int) {
-	// Obstacle icons (tiny coloured dots)
 	ox := x
 	if l.IceCount > 0 {
 		vector.DrawFilledRect(screen, float32(ox), float32(y), 10, 10, color.RGBA{140, 210, 255, 220}, false)
@@ -246,70 +361,8 @@ func drawDifficulty(screen *ebiten.Image, l Level, x, y int) {
 func DrawBiomeScene(screen *ebiten.Image, biome, tick int) {
 	info := biomes[biome]
 	r, g, b := float32(info.Color[0]), float32(info.Color[1]), float32(info.Color[2])
-	// Gradient sky
 	vector.DrawFilledRect(screen, 0, 0, ScreenW, ScreenH,
 		color.RGBA{uint8(r * 0.1), uint8(g * 0.1), uint8(b * 0.1), 255}, false)
-
-	switch biome {
-	case 1: // Forest Ruins — floating leaves and tree silhouettes
-		for i := 0; i < 6; i++ {
-			tx := float32(80+i*66) + float32(math.Sin(float64(tick)*0.02+float64(i)))*8
-			vector.DrawFilledRect(screen, tx, ScreenH-200, 30, 200, color.RGBA{30, 80, 30, 200}, false)
-			vector.DrawFilledCircle(screen, tx+15, ScreenH-210, 40, color.RGBA{40, 100, 40, 200}, false)
-		}
-		for i := 0; i < 12; i++ {
-			lx := float32((tick*2+i*44)%ScreenW)
-			ly := float32(100+i*70) + float32(math.Sin(float64(tick)*0.04+float64(i)))*20
-			vector.DrawFilledRect(screen, lx, ly, 8, 14, color.RGBA{60, 140, 60, 180}, false)
-		}
-	case 2: // Crystal Caves — icicles and snowflakes
-		for i := 0; i < 14; i++ {
-			ix := float32(20 + i*38)
-			ih := float32(40 + (i*17)%90)
-			vector.DrawFilledRect(screen, ix, 0, 14, ih, color.RGBA{140, 200, 255, 200}, false)
-		}
-		for i := 0; i < 10; i++ {
-			fx := float32((tick+i*52)%ScreenW)
-			fy := float32((tick*2+i*80)%ScreenH)
-			vector.DrawFilledCircle(screen, fx, fy, 4, color.RGBA{200, 230, 255, 160}, false)
-		}
-	case 3: // Volcanic Forge — lava rocks and ember particles
-		for i := 0; i < 8; i++ {
-			rx := float32(30+i*66) + float32(math.Sin(float64(i)*1.3))*15
-			vector.DrawFilledRect(screen, rx, ScreenH-140, 50, 140, color.RGBA{80, 50, 30, 220}, false)
-			glow := uint8(100 + 80*math.Sin(float64(tick)*0.06+float64(i)))
-			vector.DrawFilledCircle(screen, rx+25, ScreenH-140, 20, color.RGBA{220, glow, 20, 180}, false)
-		}
-		for i := 0; i < 8; i++ {
-			ex := float32((tick*3+i*68)%ScreenW)
-			ey := ScreenH - float32((tick*2+i*110)%int(ScreenH))
-			vector.DrawFilledCircle(screen, ex, ey, 3, color.RGBA{255, 140, 20, 200}, false)
-		}
-	case 4: // Arcane Library — floating books and chain links
-		for i := 0; i < 5; i++ {
-			by := float32(100+i*140) + float32(math.Sin(float64(tick)*0.04+float64(i)*0.8))*12
-			vector.DrawFilledRect(screen, float32(60+i*80), by, 40, 55, color.RGBA{80, 50, 130, 200}, false)
-			vector.DrawFilledRect(screen, float32(60+i*80), by, 6, 55, color.RGBA{100, 70, 160, 220}, false)
-		}
-		for i := 0; i < 6; i++ {
-			cx := float32(40+i*84) + float32(math.Sin(float64(tick)*0.03+float64(i)))*10
-			cy := float32(ScreenH/2) + float32(math.Cos(float64(tick)*0.03+float64(i)*0.5))*60
-			vector.DrawFilledCircle(screen, cx, cy, 10, color.RGBA{160, 130, 200, 160}, false)
-			vector.DrawFilledCircle(screen, cx, cy, 6, color.RGBA{20, 10, 40, 200}, false)
-		}
-	case 5: // Sky Citadel — clouds and lightning flashes
-		for i := 0; i < 5; i++ {
-			clx := float32((tick+i*110)%ScreenW) - 50
-			cly := float32(80 + i*70)
-			vector.DrawFilledRect(screen, clx, cly, 120, 40, color.RGBA{200, 210, 255, 120}, false)
-			vector.DrawFilledCircle(screen, clx+30, cly, 30, color.RGBA{200, 210, 255, 120}, false)
-			vector.DrawFilledCircle(screen, clx+70, cly-10, 25, color.RGBA{200, 210, 255, 120}, false)
-		}
-		// Lightning flash occasionally
-		if tick%120 < 3 {
-			vector.DrawFilledRect(screen, ScreenW/2-2, 0, 4, ScreenH/2, color.RGBA{255, 255, 200, 200}, false)
-		}
-	}
 }
 
 // LevelSelectHit returns the level number clicked, or 0.
@@ -331,4 +384,19 @@ func LevelSelectHit(biome, mx, my int) int {
 		}
 	}
 	return 0
+}
+
+// ── Shared button helper ──────────────────────────────────────────
+
+func drawMenuButton(screen *ebiten.Image, label string, x, y, w, h int, bg, highlight color.RGBA, tick int) {
+	fx, fy, fw, fh := float32(x), float32(y), float32(w), float32(h)
+	vector.DrawFilledRect(screen, fx+3, fy+5, fw, fh, color.RGBA{0, 0, 0, 100}, false)
+	vector.DrawFilledRect(screen, fx, fy, fw, fh, bg, false)
+	vector.DrawFilledRect(screen, fx, fy, fw, 3, highlight, false)
+	vector.DrawFilledRect(screen, fx, fy, fw, fh*0.4, color.RGBA{255, 255, 255, 20}, false)
+	dark := color.RGBA{bg.R / 3, bg.G / 3, bg.B / 3, 255}
+	vector.DrawFilledRect(screen, fx, fy+fh-5, fw, 5, dark, false)
+	if FontBtn != nil {
+		FCenter(screen, label, float64(fx+fw/2), float64(fy)+float64(fh)/2-10, FontBtn, ColWhite)
+	}
 }
